@@ -1,0 +1,47 @@
+# EXAMPLE ONLY. NOT VERIFIED in this repository's tests and not applied by deployment/compose.yaml.
+#
+# The per-request admission guard is advisory to a scanner that ignores it. Activation of the
+# integration REQUIRES that outbound traffic from the worker container is restricted by something the
+# scanner cannot change: this host-level nftables sketch shows the intended policy. Adapt it, test it
+# from inside a throwaway container against a local listener (never a third-party host), and only
+# then set `egress_enforced => true` in the protected plugin configuration.
+#
+# Intent for the worker container's bridge ("BRIDGE", set with the network option
+# com.docker.network.bridge.name):
+#   - allow DNS to ONE resolver you control ("RESOLVER"), nothing else on port 53/853;
+#   - allow TCP 80 and 443 to PUBLIC addresses only (the customer's site, and the fixed API origin);
+#   - drop everything else, including every private, link-local, CGNAT, documentation, multicast and
+#     cloud-metadata range, and all IPv6 that is not global unicast.
+table inet ct_php2shell_egress {
+  set deny_v4 {
+    type ipv4_addr
+    flags interval
+    elements = {
+      0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12,
+      192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.18.0.0/15,
+      198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 240.0.0.0/4
+    }
+  }
+  set deny_v6 {
+    type ipv6_addr
+    flags interval
+    elements = {
+      ::/128, ::1/128, ::ffff:0:0/96, 64:ff9b::/96, 64:ff9b:1::/48, 100::/64, 2001::/23,
+      2001:db8::/32, 2002::/16, 3fff::/20, 5f00::/16, fc00::/7, fe80::/10, fec0::/10, ff00::/8
+    }
+  }
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    iifname "BRIDGE" jump worker_egress
+  }
+  chain worker_egress {
+    ct state established,related accept
+    ip daddr RESOLVER udp dport 53 accept
+    ip daddr RESOLVER tcp dport 53 accept
+    ip daddr @deny_v4 counter drop
+    ip6 daddr @deny_v6 counter drop
+    ip6 daddr != 2000::/3 counter drop
+    tcp dport { 80, 443 } accept
+    counter drop
+  }
+}

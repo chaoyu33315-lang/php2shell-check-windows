@@ -1,0 +1,137 @@
+--- a/theme/spintech-child/functions.php
++++ b/theme/spintech-child/functions.php
+@@ -509,6 +509,16 @@
+ 		exit;
+ 	}
+ 
++	// Canonical scope is signed and persisted before asynchronous work.
++	if ( function_exists( 'ct_scan_normalize_target' ) ) {
++		$target = ct_scan_normalize_target( wp_unslash( $_POST['ct_website'] ?? '' ) );
++		if ( is_wp_error( $target ) ) {
++			wp_safe_redirect( $fail );
++			exit;
++		}
++		$website = $target;
++	}
++
+ 	$body = "Promotion: {$promo['id']}\n"
+ 		. "Referred by: {$referred_by}\n"
+ 		. "Name: {$name}\n"
+@@ -528,6 +538,21 @@
+ 	}
+ 	update_post_meta( $request_id, '_ct_ref', $referred_by );
+ 
++	if ( function_exists( 'ct_scan_on_request_ready' ) ) {
++		$fields = array( 'target' => $website, 'email' => $email, 'name' => $name, 'referrer' => $referred_by );
++		$saved = true;
++		foreach ( array( 'target', 'email', 'name' ) as $field ) {
++			$key = '_ct_scan_' . $field;
++			update_post_meta( $request_id, $key, wp_slash( $fields[ $field ] ) );
++			$saved = $saved && get_post_meta( $request_id, $key, true ) === $fields[ $field ];
++		}
++		if ( $saved && get_post_meta( $request_id, '_ct_ref', true ) === $referred_by ) {
++			do_action( 'ct_promo_request_ready', $request_id, $fields );
++		} else {
++			update_post_meta( $request_id, '_ct_scan_enqueue_error', 'request_metadata_not_saved' );
++		}
++	}
++
+ 	ct_promo_send_notification(
+ 		$request_id,
+ 		get_option( 'admin_email' ),
+--- a/mu-plugins/ct-promo-terms.php
++++ b/mu-plugins/ct-promo-terms.php
+@@ -2,7 +2,7 @@
+ /**
+  * Plugin Name: CompleteTech Promo Terms
+  * Description: Requires acceptance of the PHP2Shell scan terms on the promo form, records the acceptance, and attaches a filled-in copy of the terms to each request and its notification email.
+- * Version: 1.0.0
++ * Version: 1.1.0
+  */
+ 
+ defined( 'ABSPATH' ) || exit;
+@@ -11,7 +11,7 @@
+ function ct_promo_terms() {
+ 	return array(
+ 		'page_id' => 658,
+-		'version' => '2026-10-21',
++		'version' => '2026-10-21-r2',
+ 		'title'   => 'Free PHP2Shell Scan: Authorization and Promotion Terms',
+ 		'path'    => '/services/website-security/php2shell-scan-terms/',
+ 	);
+@@ -119,11 +119,19 @@
+ 		return;
+ 	}
+ 	foreach ( array( 'version', 'url', 'sha256', 'accepted_at', 'ip', 'remote_addr', 'user_agent' ) as $key ) {
+-		update_post_meta( $post_id, '_ct_terms_' . $key, $acceptance[ $key ] );
++		update_post_meta( $post_id, '_ct_terms_' . $key, wp_slash( $acceptance[ $key ] ) );
+ 	}
+ 	$contract = ct_promo_terms_contract( $post_id, $post->post_content, $acceptance );
+ 	$GLOBALS['ct_promo_acceptance']['contract'] = $contract;
+ 	update_post_meta( $post_id, '_ct_terms_contract', wp_slash( $contract ) );
++	// Queue eligibility requires a complete, durably saved acceptance record.
++	$terms_saved = get_post_meta( $post_id, '_ct_terms_contract', true ) === $contract;
++	foreach ( array( 'version', 'url', 'sha256', 'accepted_at', 'ip', 'remote_addr', 'user_agent' ) as $key ) {
++		$terms_saved = $terms_saved && get_post_meta( $post_id, '_ct_terms_' . $key, true ) === $acceptance[ $key ];
++	}
++	if ( $terms_saved ) {
++		update_post_meta( $post_id, '_ct_terms_saved', '1' );
++	}
+ 	wp_update_post( wp_slash( array(
+ 		'ID'           => $post_id,
+ 		'post_content' => $post->post_content . "\n\n" . $contract,
+--- a/theme/spintech-child/templates/template-service-brief.php
++++ b/theme/spintech-child/templates/template-service-brief.php
+@@ -161,10 +161,10 @@
+ 						<span class="eyebrow service-brief-offer-head">Limited offer &middot; through Nov 20, 2026</span>
+ 						<h2>Request your free PHP2Shell scan</h2>
+ 						<?php if ( 'sent' === $promo_state ) : ?>
+-							<p class="service-brief-form-note" role="status">Thanks &mdash; your request is in. We&rsquo;ll be in touch within one business day.</p>
++							<p class="service-brief-form-note" role="status">Thanks &mdash; your request is saved. Watch for a separate email to confirm authorization before scanning starts. We&rsquo;ll be in touch within one business day.</p>
+ 						<?php else : ?>
+ 							<?php if ( 'error' === $promo_state ) : ?>
+-								<p class="service-brief-form-note is-error" role="alert">Please fill in your name, a valid email, and your website, then try again.</p>
++								<p class="service-brief-form-note is-error" role="alert">Please enter your name, a valid email, and your website homepage (for example, https://example.com/), then try again.</p>
+ 							<?php elseif ( 'terms' === $promo_state ) : ?>
+ 								<p class="service-brief-form-note is-error" role="alert">Please read and agree to the scan terms, then try again.</p>
+ 							<?php endif; ?>
+@@ -174,7 +174,7 @@
+ 								<?php wp_nonce_field( 'ct_promo_request', 'ct_promo_nonce' ); ?>
+ 								<label>Name <input type="text" name="ct_name" autocomplete="name" required></label>
+ 								<label>Email <input type="email" name="ct_email" autocomplete="email" required></label>
+-								<label>Website <input type="url" name="ct_website" placeholder="https://" autocomplete="url" required></label>
++								<label>Website <input type="url" name="ct_website" placeholder="https://example.com/" autocomplete="url" required></label>
+ 								<label>Phone (optional) <input type="tel" name="ct_phone" autocomplete="tel"></label>
+ 								<label class="service-brief-form-hp" aria-hidden="true">Leave blank <input type="text" name="ct_hp" tabindex="-1" autocomplete="off"></label>
+ 								<?php if ( function_exists( 'ct_promo_terms' ) ) : $ct_terms = ct_promo_terms(); ?>
+--- a/content/php2shell-scan-terms.html
++++ b/content/php2shell-scan-terms.html
+@@ -1,5 +1,5 @@
+ <!-- wp:paragraph -->
+-<p><strong>Version 2026-10-21</strong> &middot; Effective October 21, 2026 &middot; Offer ends November 20, 2026</p>
++<p><strong>Version 2026-10-21-r2</strong> &middot; Effective October 21, 2026 &middot; Offer ends November 20, 2026</p>
+ <!-- /wp:paragraph -->
+ 
+ <!-- wp:paragraph -->
+@@ -12,6 +12,10 @@
+ 
+ <!-- wp:paragraph -->
+ <p>You confirm that you own the website you entered (the "Website") or are authorized by its owner to request security testing of it, and that you are at least 18 years old. Do not submit the form for a website you do not control, and do not let anyone else submit it for you. If your website is hosted by a third party, you are responsible for any notice or permission your hosting contract requires before external testing. If any of these confirmations is untrue, you agree to cover the reasonable costs and claims that result.</p>
++<!-- /wp:paragraph -->
++
++<!-- wp:paragraph -->
++<p>Before testing starts, we send a confirmation link to the email address you entered. Open the link and press the confirmation button to confirm your authority and the website scope. Merely opening the email or link does not start a scan. Callers may send you the request link, but must not sign or confirm on your behalf. Confirmation establishes control of the email address; it does not independently prove website ownership. The signed scope is the website hostname shown on the confirmation page. Other hostnames, including a www variant, require separate authorization.</p>
+ <!-- /wp:paragraph -->
+ 
+ <!-- wp:heading {"level":3} -->
+@@ -38,6 +42,10 @@
+ 
+ <!-- wp:paragraph -->
+ <p>Checks run at a low request rate from identified Complete Tech systems and are designed not to affect your site's availability.</p>
++<!-- /wp:paragraph -->
++
++<!-- wp:paragraph -->
++<p>After confirmation, the automated PHP2Shell portion checks the PHP version advertised in public response headers. A potentially affected version is not proof of exploitability, and an advertised fixed version is not proof that the website is safe. Hidden, conflicting or vendor-modified versions may be inconclusive. The other checks listed above remain part of our separate review before the full report is complete.</p>
+ <!-- /wp:paragraph -->
+ 
+ <!-- wp:heading {"level":3} -->

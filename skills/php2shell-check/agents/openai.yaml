@@ -1,0 +1,4 @@
+interface:
+  display_name: "PHP2Shell Check"
+  short_description: "Run passive PHP exposure checks and interpret reports"
+  default_prompt: "Use $php2shell-check to assess my authorized website list and save a report that preserves uncertainty."

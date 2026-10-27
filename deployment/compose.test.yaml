@@ -1,0 +1,45 @@
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: fixture-only
+      MARIADB_ROOT_PASSWORD: fixture-root-only
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [fixture]
+  wordpress:
+    image: wordpress:php8.3-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: fixture-only
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: "define('DISABLE_WP_CRON', true);"
+    healthcheck:
+      test: [CMD, php, -r, "exit(@fsockopen('127.0.0.1', 80) ? 0 : 1);"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - wp:/var/www/html
+      - ../integrations/wordpress:/var/www/html/wp-content/mu-plugins:ro
+      - ..:/work:ro
+    networks: [fixture]
+volumes:
+  wp:
+networks:
+  fixture:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${CT_TEST_SUBNET:-10.254.96.0/28}

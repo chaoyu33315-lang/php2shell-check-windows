@@ -1,0 +1,18 @@
+{
+  "theme/spintech-child/functions.php": {
+    "before_normalized_sha256": "911f1612ff0292d4bfce13c52b8b7fe0c27e630498c13b32352f8010d91b629a",
+    "after_sha256": "aaec0b66a94a89a3ed85475bab9a22325e52162213e58a2b2d3238f2e842f751"
+  },
+  "mu-plugins/ct-promo-terms.php": {
+    "before_normalized_sha256": "9f5df66eb176e61263e76ea1a3d24ac191350885cc60b2ad7e17dd53530927c3",
+    "after_sha256": "a1e2e25202a1857399b3d358382c7e31a4b209777dd0b25031001dc2674debfb"
+  },
+  "theme/spintech-child/templates/template-service-brief.php": {
+    "before_normalized_sha256": "ad4eec2bd5e973b54f0f2a06155c96d0f4432d0c4dfd829a3145e3b8ca11073f",
+    "after_sha256": "9ce71eadaed23d34e547539df3cb46d920e00caa0313e5a32ed1f58b0bf3f7ea"
+  },
+  "content/php2shell-scan-terms.html": {
+    "before_normalized_sha256": "20ea5d6c61f65a79bba0bc18b248fc1ecef78a1c7572f4da3328e1a5083c3dce",
+    "after_sha256": "4def089ebb32c318a3ccab18d8eb432f0cb8e28cd309554efee907f183653ee3"
+  }
+}

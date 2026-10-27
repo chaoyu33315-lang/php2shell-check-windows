@@ -1,0 +1,49 @@
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+      args:
+        CHECKER_REVISION: ${CT_SCAN_REVISION:?Set the pinned source revision}
+    image: ct-php2shell-worker:${CT_SCAN_REVISION}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 384m
+    cpus: 0.5
+    environment:
+      CT_SCAN_SITE_URL: https://complete.tech
+      CT_SCAN_SECRET_FILE: /run/ct-scan/key
+      CT_SCAN_SPOOL: /var/lib/ct-scan
+      CT_SCAN_POLL_SECONDS: "15"
+    volumes:
+      - spool:/var/lib/ct-scan
+      - secrets:/run/ct-scan:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    networks: [worker]
+    healthcheck:
+      test: [CMD, python, -c, "import os,time; p='/var/lib/ct-scan/heartbeat.json'; raise SystemExit(0 if time.time()-os.stat(p).st_mtime < 600 else 1)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 60s
+      retries: 2
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "3"
+volumes:
+  spool:
+  secrets:
+    external: true
+    name: ct-php2shell-secrets
+networks:
+  worker:
+    ipam:
+      config:
+        - subnet: ${CT_WORKER_SUBNET:-10.254.97.0/28}

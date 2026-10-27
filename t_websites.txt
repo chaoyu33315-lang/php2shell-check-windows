@@ -1,0 +1,3 @@
+# Reserved example domains; replace with websites you are permitted to check.
+https://localhost/
+https://127.0.0.1/wordpress/

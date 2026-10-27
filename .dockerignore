@@ -1,0 +1,10 @@
+*
+!wordpress_check.py
+!LICENSE
+!LICENSING.md
+!integrations/
+!integrations/__init__.py
+!integrations/worker/
+!integrations/worker/*.py
+!deployment/
+!deployment/Dockerfile
