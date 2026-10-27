@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>Find websites(wordpress) that advertise a PHP version affected by PHP2Shell</b><br>
+  <b>Find websites(*wordpress*) that advertise a PHP version affected by PHP2Shell</b><br>
   CVE-2026-109618 · CVE-2026-109619 · passive, single-file, dependency-free
 </p>
 
@@ -26,6 +26,7 @@ git clone https://github.com/CompleteTech-LLC/php2shell-check.git
 cd php2shell-check
 pip install -r requirements.txt
 python wordpress_check.py --input t_websites.txt --format html --output result.html
+
 ```
 
 Python 3.10+ on Windows.
